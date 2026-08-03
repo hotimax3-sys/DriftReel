@@ -12,7 +12,8 @@ const els = {
   enableMic: $("enableMic"),
   cameraState: $("cameraState"),
   micState: $("micState"),
-  previewImg: $("previewImg"),
+  previewVideo: $("previewVideo"),
+  previewCanvas: $("previewCanvas"),
   previewEmpty: $("previewEmpty"),
   rTilt: $("rTilt"),
   rGaze: $("rGaze"),
@@ -142,8 +143,9 @@ els.enableMic.addEventListener("click", async () => {
 async function startLocalPreview() {
   try {
     previewStream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 }, audio: false });
-    els.previewImg.srcObject = previewStream;
-    els.previewImg.classList.remove("hidden");
+    els.previewVideo.srcObject = previewStream;
+    els.previewVideo.classList.remove("hidden");
+    els.previewCanvas.classList.add("hidden");
     els.previewEmpty.classList.add("hidden");
     chrome.runtime.sendMessage({ type: MESSAGES.POPUP_START_PREVIEW }, () => {});
   } catch (e) {
@@ -156,8 +158,9 @@ function stopLocalPreview() {
     previewStream.getTracks().forEach((t) => t.stop());
     previewStream = null;
   }
-  els.previewImg.srcObject = null;
-  els.previewImg.classList.add("hidden");
+  els.previewVideo.srcObject = null;
+  els.previewVideo.classList.add("hidden");
+  els.previewCanvas.classList.add("hidden");
   els.previewEmpty.classList.remove("hidden");
   chrome.runtime.sendMessage({ type: MESSAGES.POPUP_STOP_PREVIEW });
 }
@@ -186,10 +189,18 @@ els.eyeSens.addEventListener("change", () => {
 chrome.runtime.onMessage.addListener((msg) => {
   if (!msg) return;
   if (msg.type === MESSAGES.CAPTURE_FRAME_RESULT && msg.frame) {
-    if (els.previewImg.srcObject) els.previewImg.srcObject = null;
-    els.previewImg.src = msg.frame;
-    els.previewImg.classList.remove("hidden");
-    els.previewEmpty.classList.add("hidden");
+    // Landmark overlay frame from offscreen — draw to canvas, hide live video
+    const img = new Image();
+    img.onload = () => {
+      const c = els.previewCanvas;
+      c.width = 160; c.height = 120;
+      const cx = c.getContext("2d");
+      cx.drawImage(img, 0, 0, 160, 120);
+      c.classList.remove("hidden");
+      els.previewVideo.classList.add("hidden");
+      els.previewEmpty.classList.add("hidden");
+    };
+    img.src = msg.frame;
   } else if (msg.type === MESSAGES.POPUP_STATE) {
     state = { ...state, ...msg.state };
     renderState();

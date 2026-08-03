@@ -15,8 +15,13 @@ let runtimeState = {
 // ---- Settings persistence ----
 async function loadSettings() {
   try {
-    const stored = await chrome.storage.local.get("settings");
+    const stored = await chrome.storage.local.get(["settings", "permCamera", "permMic"]);
     if (stored.settings) runtimeState.settings = { ...DEFAULT_SETTINGS, ...stored.settings };
+    // Restore permission state across SW restarts — Chrome persists getUserMedia
+    // permission for the extension origin, so if we previously recorded it as
+    // granted, it's still granted.
+    if (stored.permCamera) runtimeState.cameraPermissionGranted = true;
+    if (stored.permMic) runtimeState.micPermissionGranted = true;
   } catch (e) { /* storage may be unavailable transiently */ }
 }
 
@@ -173,6 +178,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       runtimeState.cameraPermissionGranted = true;
       runtimeState.settings.cameraEnabled = true;
       saveSettings({ cameraEnabled: true });
+      chrome.storage.local.set({ permCamera: true }).catch(() => {});
       sendResponse({ ok: true });
       maybeAutoStartCapture();
       return;
@@ -181,13 +187,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       runtimeState.micPermissionGranted = true;
       runtimeState.settings.micEnabled = true;
       saveSettings({ micEnabled: true });
+      chrome.storage.local.set({ permMic: true }).catch(() => {});
       sendResponse({ ok: true });
       maybeAutoStartCapture();
       return;
 
     case MESSAGES.POPUP_DISABLE_CAMERA:
       runtimeState.settings.cameraEnabled = false;
+      runtimeState.cameraPermissionGranted = false;
       saveSettings({ cameraEnabled: false });
+      chrome.storage.local.set({ permCamera: false }).catch(() => {});
       if (runtimeState.captureActive) {
         chrome.runtime.sendMessage({
           type: MESSAGES.START_CAPTURE,
@@ -200,7 +209,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     case MESSAGES.POPUP_DISABLE_MIC:
       runtimeState.settings.micEnabled = false;
+      runtimeState.micPermissionGranted = false;
       saveSettings({ micEnabled: false });
+      chrome.storage.local.set({ permMic: false }).catch(() => {});
       if (runtimeState.captureActive) {
         chrome.runtime.sendMessage({
           type: MESSAGES.START_CAPTURE,

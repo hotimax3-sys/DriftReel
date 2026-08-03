@@ -5,7 +5,19 @@
 import { MESSAGES } from "../lib/constants.js";
 import { describeMediaError } from "../lib/errors.js";
 
-const { FaceLandmarker, FilesetResolver, GestureRecognizer } = await import("../lib/vision_bundle.mjs");
+// Lazy-load MediaPipe — don't block the entire document on a top-level await
+// that can fail (CSP, missing wasm, etc). Load on first camera start.
+let visionBundle = null;
+async function loadVisionBundle() {
+  if (visionBundle) return visionBundle;
+  try {
+    visionBundle = await import("../lib/vision_bundle.mjs");
+    return visionBundle;
+  } catch (e) {
+    sendStatus({ ok: false, message: "Failed to load MediaPipe vision library: " + (e.message || e) });
+    throw e;
+  }
+}
 
 const video = document.getElementById("cam");
 
@@ -16,6 +28,7 @@ let gestureRecognizer = null;
 let recognition = null;
 let rafId = null;
 let running = false;
+let modelsLoading = false;
 
 let config = {
   cameraEnabled: false,
@@ -25,16 +38,13 @@ let config = {
   eyeGazeSensitivity: 0.5
 };
 
-// gesture debounce state
 let lastAction = { name: null, time: 0 };
 const ACTION_COOLDOWN = 1200;
 
-// head tilt state
 let tiltBaseline = null;
 let tiltActive = null;
 let tiltActionFired = false;
 
-// eye gaze state
 let gazeBaseline = null;
 let gazeActive = null;
 let gazeActionFired = false;
@@ -45,26 +55,38 @@ let previewTimer = 0;
 
 async function loadModels() {
   if (faceLandmarker && gestureRecognizer) return;
-  const fileset = await FilesetResolver.forVisionTasks(
-    chrome.runtime.getURL("wasm")
-  );
-  faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: chrome.runtime.getURL("lib/face_landmarker.task"),
-      delegate: "GPU"
-    },
-    outputFaceBlendshapes: true,
-    runningMode: "VIDEO",
-    numFaces: 1
-  });
-  gestureRecognizer = await GestureRecognizer.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: chrome.runtime.getURL("lib/gesture_recognizer.task"),
-      delegate: "GPU"
-    },
-    runningMode: "VIDEO",
-    numHands: 1
-  });
+  if (modelsLoading) return;
+  modelsLoading = true;
+  try {
+    const { FaceLandmarker, FilesetResolver, GestureRecognizer } = await loadVisionBundle();
+    const fileset = await FilesetResolver.forVisionTasks(
+      chrome.runtime.getURL("wasm")
+    );
+    // Offscreen documents don't support GPU/WebGL reliably — use CPU delegate
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath: chrome.runtime.getURL("lib/face_landmarker.task"),
+        delegate: "CPU"
+      },
+      outputFaceBlendshapes: true,
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+    gestureRecognizer = await GestureRecognizer.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath: chrome.runtime.getURL("lib/gesture_recognizer.task"),
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 1
+    });
+    sendStatus({ ok: true, message: "Models loaded" });
+  } catch (e) {
+    sendStatus({ ok: false, message: "Failed to load AI models: " + (e.message || e) });
+    throw e;
+  } finally {
+    modelsLoading = false;
+  }
 }
 
 function sendStatus(status) {
@@ -119,7 +141,6 @@ function maybeFireAction(name) {
   sendStatus({ ok: true, action: name });
 }
 
-// ---- Head tilt (left/right) ----
 function processFace(result) {
   if (!result || !result.faceLandmarks || !result.faceLandmarks[0]) {
     tiltBaseline = null; tiltActive = null; tiltActionFired = false;
@@ -127,7 +148,6 @@ function processFace(result) {
     return;
   }
   const lm = result.faceLandmarks[0];
-  // Eye outer corners: left ~33, right ~263; estimate roll angle
   const leftEye = lm[33];
   const rightEye = lm[263];
   const dx = rightEye.x - leftEye.x;
@@ -145,7 +165,6 @@ function processFace(result) {
     tiltActive = null; tiltActionFired = false;
   }
 
-  // Eye gaze: nose tip ~1 vs eye centers ~159/386
   const nose = lm[1];
   const le = lm[159], re = lm[386];
   const eyeMidX = (le.x + re.x) / 2;
@@ -169,7 +188,6 @@ function processFace(result) {
   }
 }
 
-// ---- Hand gestures ----
 function processGesture(result) {
   if (!result || !result.gestures || !result.gestures[0] || result.gestures[0].length === 0) return;
   const gesture = result.gestures[0][0].categoryName;
@@ -198,7 +216,6 @@ function countFingers(hand) {
   return count;
 }
 
-// ---- Voice commands (Web Speech API) ----
 function startVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
@@ -244,7 +261,6 @@ function stopVoice() {
   if (recognition) { try { recognition.stop(); } catch (e) {} recognition = null; }
 }
 
-// ---- Camera/mic capture ----
 async function startCamera() {
   if (cameraStream) return true;
   try {
@@ -253,6 +269,8 @@ async function startCamera() {
       audio: false
     });
     video.srcObject = cameraStream;
+    // Must explicitly play — offscreen video won't autoplay reliably
+    await video.play().catch(() => {});
     cameraStream.getVideoTracks().forEach((track) => {
       track.addEventListener("ended", () => sendStatus({ ok: false, message: "Camera disconnected" }));
       track.addEventListener("mute", () => sendStatus({ ok: false, message: "Camera temporarily unavailable" }));
@@ -311,8 +329,12 @@ async function start(msg) {
   if (config.cameraEnabled) {
     camOk = await startCamera();
     if (camOk) {
-      await loadModels();
-      if (!rafId) loop();
+      try {
+        await loadModels();
+        if (!rafId) loop();
+      } catch (e) {
+        // models failed to load — camera still works but no AI detection
+      }
     }
   } else {
     stopCamera();
@@ -333,7 +355,6 @@ function stop() {
   sendStatus({ ok: true, message: "Capture stopped" });
 }
 
-// ---- Message handler ----
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || !msg.type) return;
   switch (msg.type) {

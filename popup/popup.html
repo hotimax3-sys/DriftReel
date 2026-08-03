@@ -34,7 +34,8 @@
   <section class="hud">
     <h2>Live Preview</h2>
     <div class="preview-wrap">
-      <img id="previewImg" alt="Camera preview" class="hidden" />
+      <video id="previewVideo" autoplay playsinline muted class="hidden"></video>
+      <canvas id="previewCanvas" class="hidden"></canvas>
       <div class="preview-empty" id="previewEmpty">Enable camera to see preview</div>
     </div>
     <div class="readouts">

@@ -103,13 +103,19 @@ section h2 {
   overflow: hidden;
   margin-bottom: 8px;
 }
-.hud #previewImg {
+.hud #previewVideo {
   width: 100%; height: 100%;
   object-fit: cover;
   display: block;
   transform: scaleX(-1);
 }
-.hud #previewImg.hidden { display: none; }
+.hud #previewVideo.hidden { display: none; }
+.hud #previewCanvas {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.hud #previewCanvas.hidden { display: none; }
 .preview-empty {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
