@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>DriftReel</title>
+<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-dot"></span>
+      <h1>DriftReel</h1>
+    </div>
+    <span id="platformStatus" class="badge">Idle</span>
+  </header>
+
+  <section class="permissions">
+    <div class="perm-row">
+      <div class="perm-info">
+        <span class="perm-label">Camera</span>
+        <span class="perm-state" id="cameraState">Not enabled</span>
+      </div>
+      <button id="enableCamera" class="btn btn-primary">Enable Camera</button>
+    </div>
+    <div class="perm-row">
+      <div class="perm-info">
+        <span class="perm-label">Microphone</span>
+        <span class="perm-state" id="micState">Not enabled</span>
+      </div>
+      <button id="enableMic" class="btn btn-primary">Enable Microphone</button>
+    </div>
+  </section>
+
+  <section class="hud">
+    <h2>Live Preview</h2>
+    <div class="preview-wrap">
+      <img id="previewImg" alt="Camera preview" class="hidden" />
+      <div class="preview-empty" id="previewEmpty">Enable camera to see preview</div>
+    </div>
+    <div class="readouts">
+      <div class="readout"><span>Head tilt</span><b id="rTilt">—</b></div>
+      <div class="readout"><span>Eye gaze</span><b id="rGaze">—</b></div>
+      <div class="readout"><span>Gesture</span><b id="rGesture">—</b></div>
+      <div class="readout"><span>Voice</span><b id="rVoice">—</b></div>
+      <div class="readout"><span>Last action</span><b id="rAction">—</b></div>
+    </div>
+  </section>
+
+  <section class="settings">
+    <h2>Sensitivity</h2>
+    <div class="slider-row">
+      <label for="headSens">Head tilt</label>
+      <input type="range" id="headSens" min="0" max="1" step="0.05" value="0.5" />
+      <span id="headSensVal" class="sens-val">0.50</span>
+    </div>
+    <div class="slider-row">
+      <label for="eyeSens">Eye gaze</label>
+      <input type="range" id="eyeSens" min="0" max="1" step="0.05" value="0.5" />
+      <span id="eyeSensVal" class="sens-val">0.50</span>
+    </div>
+  </section>
+
+  <section class="status-line">
+    <span id="statusLine">Click Enable Camera / Enable Microphone to start.</span>
+  </section>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

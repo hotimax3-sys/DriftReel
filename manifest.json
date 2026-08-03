@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "DriftReel",
+  "version": "2.0.0",
+  "description": "Hands-free control for YouTube Shorts, Instagram Reels, Facebook Reels, and TikTok via head tilt, eye gaze, hand gestures, and voice.",
+  "permissions": ["tabs", "scripting", "offscreen", "storage", "activeTab", "webNavigation"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.instagram.com/*",
+    "*://*.facebook.com/*",
+    "*://*.tiktok.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "DriftReel",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/*.task", "lib/vision_bundle.mjs", "wasm/*", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
